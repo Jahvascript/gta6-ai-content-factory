@@ -26,7 +26,7 @@ def fetch(src, d, max_min):
         if not vid.exists():
             args = ytdlp_base() + ["-f", "bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080]/b", "--merge-output-format", "mp4",
                                    "-o", str(vid)]
-            if (info.get("duration") or 0) > max_min * 60:
+            if max_min > 0 and (info.get("duration") or 0) > max_min * 60:
                 args += ["--download-sections", f"*0-{max_min * 60}"]
             run(args + [src])
         if info.get("was_live") and not (d / "chat.json").exists():  # YouTube chat replay
@@ -37,10 +37,14 @@ def fetch(src, d, max_min):
     return vid, info
 
 
-def audio_rms(vid, d):
+def audio_rms(vid, d, max_minutes=None):
     wav = d / "audio.wav"
     if not wav.exists():
-        run([tool("ffmpeg"), "-y", "-v", "error", "-i", str(vid), "-ac", "1", "-ar", "16000", str(wav)])
+        command = [tool("ffmpeg"), "-y", "-v", "error", "-i", str(vid)]
+        if max_minutes is not None:
+            command += ["-t", str(max_minutes * 60)]
+        command += ["-ac", "1", "-ar", "16000", str(wav)]
+        run(command)
     with wave.open(str(wav)) as w:
         x = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).astype(np.float32) / 32768
     n = len(x) // 16000
@@ -49,27 +53,65 @@ def audio_rms(vid, d):
 
 
 def transcribe(wav, d):
+    """Transcribe audio in resumable five-minute chunks."""
     out = d / "transcript.json"
     if out.exists():
         return load_json(out)
-    from faster_whisper import WhisperModel
-    try:
-        import ctranslate2
-        cuda = ctranslate2.get_cuda_device_count() > 0
-    except Exception:
-        cuda = False
-    with wave.open(str(wav)) as w:  # pass samples directly (16 kHz mono), no extra decoder needed
-        pcm = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).astype(np.float32) / 32768
 
-    def run_on(device):
-        model = WhisperModel("small", device=device, compute_type="float16" if device == "cuda" else "int8")
-        segs, _ = model.transcribe(pcm, word_timestamps=True, vad_filter=True)
-        return [{"w": w.word.strip(), "s": round(w.start, 2), "e": round(w.end, 2)} for s in segs for w in (s.words or [])]
-    try:
-        words = run_on("cuda" if cuda else "cpu")
-    except RuntimeError as e:  # GPU present but CUDA libraries missing: fall back to CPU
-        print(f"GPU transcription unavailable ({str(e)[:80]}), using CPU")
-        words = run_on("cpu")
+    from faster_whisper import WhisperModel
+
+    chunk_dir = d / "transcript_chunks"
+    chunk_dir.mkdir(exist_ok=True)
+
+    with wave.open(str(wav)) as audio:
+        sample_rate = audio.getframerate()
+        channels = audio.getnchannels()
+        assert channels == 1 and audio.getsampwidth() == 2
+        total_frames = audio.getnframes()
+
+    chunk_frames = sample_rate * 300
+    count = (total_frames + chunk_frames - 1) // chunk_frames
+    model = None
+    words = []
+
+    for index in range(count):
+        cache = chunk_dir / f"chunk_{index:04d}.json"
+
+        if cache.exists():
+            chunk_words = load_json(cache)
+            print(f"Cached chunk {index + 1}/{count}", flush=True)
+        else:
+            if model is None:
+                model = WhisperModel("small", device="cpu", compute_type="int8")
+
+            with wave.open(str(wav)) as audio:
+                audio.setpos(index * chunk_frames)
+                raw = audio.readframes(min(chunk_frames, total_frames - index * chunk_frames))
+
+            pcm = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768
+            offset = index * 300
+
+            segments, _ = model.transcribe(
+                pcm,
+                word_timestamps=True,
+                vad_filter=True
+            )
+
+            chunk_words = [
+                {
+                    "w": word.word.strip(),
+                    "s": round(offset + word.start, 2),
+                    "e": round(offset + word.end, 2)
+                }
+                for segment in segments
+                for word in (segment.words or [])
+            ]
+
+            save_json(cache, chunk_words)
+            print(f"Completed chunk {index + 1}/{count}: {len(chunk_words)} words", flush=True)
+
+        words.extend(chunk_words)
+
     save_json(out, words)
     return words
 
@@ -112,14 +154,14 @@ def smooth(a, k):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("src"); ap.add_argument("--top", type=int, default=8)
+    ap.add_argument("src"); ap.add_argument("--top", type=int, default=50)
     ap.add_argument("--min", type=float, default=15); ap.add_argument("--max", type=float, default=40)
-    ap.add_argument("--chat"); ap.add_argument("--max-minutes", type=int, default=90)
+    ap.add_argument("--chat"); ap.add_argument("--max-minutes", type=int, default=0)
     a = ap.parse_args()
     d = job_dir(a.src)
     vid, info = fetch(a.src, d, a.max_minutes)
     dur = float(ffprobe(vid)["format"]["duration"])
-    wav, db = audio_rms(vid, d)
+    wav, db = audio_rms(vid, d, a.max_minutes if a.max_minutes > 0 else None)
     n = len(db)
     words = transcribe(wav, d)
     # signals

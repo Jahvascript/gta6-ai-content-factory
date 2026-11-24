@@ -6,3 +6,44 @@ test/
 *.wav
 *.ts
 !docs/*.mp4
+
+# Jahvascript: local environments
+.venv311/
+venv/
+env/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# Private configuration and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+secrets.json
+
+# Generated and local runtime files
+backups/
+data/
+footage/
+logs/
+config/
+*.log
+
+# Development snapshots
+*.bak
+*.backup-*
+scripts/*.pre_*.py
+scripts/*.backup-*.py
+scripts/secrets_map.py
+
+# Python temporary files
+*.pyc
+.pytest_cache/
+.mypy_cache/
+
+# Local FFmpeg executable - install separately
+tools/ffmpeg/ffmpeg

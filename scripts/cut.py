@@ -151,7 +151,7 @@ def video_filter(layout, cam, ass, band=None, cam_side='right', src=None, game_x
         x, y, w, h = map(float, cam.split(":"))
         v = (f"[0:v]split[a][b];[a]crop=iw*{w}:ih*{h}:iw*{x}:ih*{y},scale={W}:{int(H * 0.38)}:force_original_aspect_ratio=increase,"
              f"crop={W}:{int(H * 0.38)}[cam];[b]scale=-2:{H - int(H * 0.38)},crop={W}:{H - int(H * 0.38)}[game];[cam][game]vstack[v]")
-    sub = str(ass).replace("\\", "/").replace(":", "\\:")
+    sub = str(Path(ass).resolve()).replace("\\", "/").replace(":", "\\:")
     return v + f";[v]fps=30,subtitles='{sub}'[vo]"
 
 
@@ -273,10 +273,17 @@ def main():
         gx = game_offset(c['source'], s0, e0, src, [float(t) for t in cam.split(':')])
     v = video_filter(layout, cam, ass, band=band, cam_side=side, src=src, game_x=gx, face_expr=face_expr)
     mp4 = out / f"clip_{a.pick}.mp4"
+    temp_mp4 = out / f"clip_{a.pick}.rendering.mp4"
+    if temp_mp4.exists():
+        temp_mp4.unlink()
+
     run([tool("ffmpeg"), "-y", "-v", "error", "-ss", f"{s0:.2f}", "-to", f"{e0:.2f}", "-i", c["source"],
          "-filter_complex", v, "-map", "[vo]", "-map", "0:a?", "-af", "loudnorm=I=-14:TP=-1.5:LRA=11",
-         "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k",
-         "-ar", "48000", "-movflags", "+faststart", str(mp4)])
+         "-c:v", "libx264", "-preset", "fast", "-crf", "20", "-threads", "2", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k",
+         "-ar", "48000", "-movflags", "+faststart", str(temp_mp4)])
+    if not temp_mp4.exists() or temp_mp4.stat().st_size == 0:
+        raise RuntimeError("Render produced no output")
+    temp_mp4.replace(mp4)
     info = c.get("info", {})
     save_json(out / f"clip_{a.pick}.json", {"file": str(mp4), "start": s0, "end": e0, "layout": layout, "hook": a.hook or a.title, "title": a.title, "cam": cam,
                                             "source_url": info.get("webpage_url"), "source_title": info.get("title"),
