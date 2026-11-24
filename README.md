@@ -91,3 +91,37 @@ python scripts/live.py "https://www.youtube.com/watch?v=<live>" --minutes 60
 Windows, macOS or Linux, Python 3.10+. An NVIDIA GPU makes transcription faster; on the CPU a 12-minute video takes about 5 minutes.
 
 MIT license.
+
+
+---
+
+## Everyone Is Welcome at JahvaScript
+
+**Different backgrounds. Different experiences. One community.**
+
+At JahvaScript, we believe open source is for everyone.
+
+Whether you're an experienced engineer, a student, a beginner,
+or someone with an idea, you're welcome here.
+
+We value peace, respect, accessibility, creativity, learning,
+and constructive collaboration.
+
+Contributions of all kinds matter: code, documentation, testing,
+bug reports, accessibility improvements, questions, and suggestions.
+
+Participation is open to people of every background, belief,
+identity, ability, and experience level.
+
+**Every contribution counts. Every voice deserves respect.**
+
+### Our Community Standards
+
+- [Code of Conduct](https://github.com/Jahvascript/.github/blob/main/CODE_OF_CONDUCT.md)
+- [Contribution Guidelines](https://github.com/Jahvascript/.github/blob/main/CONTRIBUTING.md)
+- [Community Support](https://github.com/Jahvascript/.github/blob/main/SUPPORT.md)
+- [Accessibility and Inclusion](https://github.com/Jahvascript/.github/blob/main/ACCESSIBILITY.md)
+
+Community reporting: jahvascripts@gmail.com
+
+*JahvaScript — Code with purpose. Build with unity.*
